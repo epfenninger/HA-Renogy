@@ -5,11 +5,12 @@ import datetime
 import renogy
 
 class Vandiamo(hass.Hass):
-    
+    #Method that is called every fifteen seconds to get updates
     def runUpdates(self, kwargs):
         self.updateSolar(False)
         self.updateBattery(False)
-      
+    
+    #Method that connects to the victron to pull info
     def updateSolar(self, kwargs):
       v = vict("/dev/serial/by-id/usb-VictronEnergy_BV_VE_Direct_cable_VE5BFHO8-if00-port0", 5)
       global VICTRON_ERROR
@@ -36,7 +37,10 @@ class Vandiamo(hass.Hass):
       
       
 
-
+    #Method for updating renogy batteries. Change /dev/ttyUSB1 to match your usb device
+    #YOU WILL NEED TO CHANGE BATTERY ADDRESSES - MINE ARE 49,50,51,52,53 TO MATCH YOUR SETUP. The default is 247, if your addresses
+    #Haven't been changed and you connect multiple batteries, they'll crosstalk and it won't work. 
+    #See the 'set address' method in Renogy.py
     def updateBattery(self, kwargs):
         p = renogy.RenogySmartBattery("/dev/ttyUSB1")
         totalAH = 0
@@ -91,7 +95,7 @@ class Vandiamo(hass.Hass):
         self.set_state("sensor.batterystatus", state = status, attributes = {"friendly_name": "Battery Status"})
         self.set_state("sensor.batterywatts", state = round((totalCur * volts),2), attributes = {"friendly_name":"Battery Wattage Use", "unit_of_measurement":"W"})
       
-      
+    #Method for parsing Victron output
     def parseVictron(self,msg, msgType):
         VICTRON_ERROR = {
           '0': 'No error',
@@ -159,7 +163,7 @@ class Vandiamo(hass.Hass):
           return VICTRON_CS.get(msg)
       
       
-      
+    #Initialization for AppDaemon
     def initialize(self):
       start_time=self.datetime()
       self.runUpdates(False)
