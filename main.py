@@ -48,6 +48,7 @@ class Vandiamo(hass.Hass):
         for i in range(49,54):
           totalCapacity = 0
           try:
+            #Sets the sensor name for Home Assistant to Battery + Battery Address Mod 10. So Address 51 would be - Battery1
             sensorName = "Battery" + str((i+2)%10)
             capacity = round(p.capacity(i),2)
             volts = round(p.volts(i),2)
@@ -58,7 +59,7 @@ class Vandiamo(hass.Hass):
             self.log(temp)
             temp = temp / 10
             temp = (temp * (9/5)) + 32
-            
+            #To set a sensor in HomeAssistant it is sensor.<sensorname>, state = <stateValue> , attributes = <Attributes of sensor>
             self.set_state("sensor." + sensorName + "capacity", state = capacity, attributes = {"friendly_name": sensorName + " Capacity", "unit_of_measurement":"Ah"})
             self.set_state("sensor." + sensorName + "voltage", state = volts, attributes = {"friendly_name": sensorName + " Voltage", "unit_of_measurement":"V"})
             self.set_state("sensor." + sensorName + "current", state = amps, attributes = {"friendly_name": sensorName + " Current", "unit_of_measurement":"A"})
