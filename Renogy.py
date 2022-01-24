@@ -116,7 +116,7 @@ class RenogySmartBattery(minimalmodbus.Instrument):
     #Utilizes the write register to change the slave address of the battery
     def changeAddress(self, value, address):
       try:
-        return self.writeRegister(5226,value, address)
+        return self.writeRegister(5223,value, address)
       except Exception as e:
         print(e)
 
