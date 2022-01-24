@@ -45,6 +45,8 @@ class Vandiamo(hass.Hass):
         p = renogy.RenogySmartBattery("/dev/ttyUSB1")
         totalAH = 0
         totalCur = 0
+        #change maxAH to reflect your current max AH
+        maxAH = 500.0
         for i in range(49,54):
           totalCapacity = 0
           try:
@@ -79,16 +81,16 @@ class Vandiamo(hass.Hass):
           except Exception as e:
             self.log(e)
             
-        totalPercentage = round((totalAH / 500.0) * 100, 2)
+        totalPercentage = round((totalAH / maxAH) * 100, 2)
             
         if(totalCur > 0):
-            status = "Charging: " + str(round((500-totalAH) / totalCur,2)) + " Hours"
+            status = "Charging: " + str(round((maxAH-totalAH) / totalCur,2)) + " Hours"
             
         elif(totalCur == 0):
             status = "Idle"
             
         elif(totalCur < 0):
-            status = "Discharging: " + str(round((totalAH - 500*.2) / abs(totalCur),2)) + " Hours"
+            status = "Discharging: " + str(round((totalAH - maxAH*.2) / abs(totalCur),2)) + " Hours"
         else:
             status = "Error"        
         
