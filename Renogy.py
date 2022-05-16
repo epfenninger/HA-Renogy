@@ -6,109 +6,132 @@ import time
 #Creates a new instance of a minimal modbus connection
 #Change portname to whatever you're using (/dev/USB0, COM4, etc)
 #Or just change it when you create the new serial object
+#247 is the default address for Renogy devices
 class RenogySmartBattery(minimalmodbus.Instrument):
-    def __init__(self, portname="COM5", slaveaddress=247, baudrate=9600, timeout=0.5):
+    def __init__(self, portname="/dev/USB0", slaveaddress=247, baudrate=9600, timeout=0.5):
           minimalmodbus.Instrument.__init__(self, portname, slaveaddress)
           self.serial.baudrate = baudrate
           self.serial.timeout = timeout
+          self.address = slaveaddress
+          self.amps = 0
+          self.unitVolts = 0
+          self.cellVolts = []
+          self.numCells = 4
+          self.capacity = 0
+          self.maxCapacity = 0
+          self.percentage = 0
+          self.state = "Error"
+          self.heater = False
+          self.cellTemp = []
+          self.cycles = 0
+          self.batSerial = ""
+
+          #Reads number of Cells
+          try:
+            self.numCells = self.read_register(5000)
+          except Exception as e:
+            print("Error getting number of cells")
+
+          #Reads the Serial Number
+          try:
+            self.batSerial = self.read_registers(5110,6)
+          except Exception as e:
+            print("Error reading the serial number")
+          
+
+    def update(self):
+      #Gets unit current flow in A (0), unit voltage (1), capacity in AH (2,3), max capacity (4,5), cycle nums (6)
+      try:
+        battInfo = self.read_registers(5042,7)
         
-    #Gets the amperage flow of the battery specified
-    def amps(self, address):
-        try:
-          self.address = address
-          r = self.read_register(5042)
-          return r / 100.0 if r < 61440 else (r - 65535) / 100.0
-        except Exception as e:
-          print(e)
-          return 0
+        self.amps = battInfo[0] / 100 if battInfo[0] < 61440 else (battInfo[0] - 65535) / 100
+        self.unitVolts = battInfo[1] / 10
+        self.capacity = ( battInfo[2] << 15 | (battInfo[3] >> 1) ) * 0.002
+        self.Maxcapacity = ( battInfo[4] << 15 | (battInfo[5] >> 1) ) * 0.002
+        self.cycles = battInfo[6]
+      except Exception as e:
+        print("Error getting Unit info" + e)
 
-    #Gets the voltage of the battery specified
-    def volts(self, address):
-        try:
-          self.address = address
-          return self.read_register(5043) / 10.0
-        except Exception as e:
-          print(e)
-          return 0
+      #Gets heater status
+      try:
+        heaterInfo = self.read_register(5013)
+        self.heater = (heaterInfo / 255) * 100
+      except Exception as e:
+        print("Error getting heater info" + e)
 
-    #Gets the current AH of the battery specified
-    def capacity(self, address):
-        try:
-          self.address = address
-          r = self.read_registers(5044, 2)
-          return ( r[0] << 15 | (r[1] >> 1) ) * 0.002
-        except Exception as e:
-          print(e)
-          return 0
+      #Get individual cell info
+      try:
+        self.cellTemp = self.read_registers(5018, self.numCells)
+        self.cellVolts = self.read_registers(5001, self.numCells)
+      except Exception as e:
+        print("Error getting individual cell info")
 
-    #Gets the max capacity of the battery specified
-    def max_capacity(self, address):
-        try:
-          self.address = address
-          r = self.read_registers(5046, 2)
-          return ( r[0] << 15 | (r[1] >> 1) ) * 0.002
-        except Exception as e:
-          print(e)
-          return 0
+    def getNumCells(self):
+      return self.numCells
+    
+    #sets the address of the battery
+    def setAddress(self, address):
+       self.address = address
 
-    #Gets the percentage full of the battery specified
-    def percentage(self, address):
-        try:
-          self.address = address
-          return self.capacity(address) / self.max_capacity(address) * 100
-        except Exception as e:
-          print(e)
-          return 0
+    #Gets the amperage flow of the battery
+    def getAmps(self):
+        return self.amps
+    #Returns a list of the cell voltages
+    def getCellVolts(self):
+        return [x / 19 for x in self.cellVolts]
+    #Returns number of cycles on the battery
+    def getCycles(self):
+        return self.cycles
+    #Returns the serial number
+    def getSerial(self):
+        return ''.join(self.batSerial)
 
-    #Gets the state of the battery specified (Charging, Discharging, or Error)
-    def state(self, address):
-        try:
-          a = self.amps(address)
-          if a < 0: return "DISCHARGING"
-          elif a > 0: return "CHARGING"
+    #Gets the voltage of the battery
+    def getUnitVolts(self):
+        return self.unitVolts
+
+    #Gets the current AH of the battery
+    def getCapacity(self):
+        return self.capacity
+
+    #Gets the max capacity of the battery
+    def getMax_capacity(self):
+        return self.maxCapacity
+
+    #Gets the percentage full of the battery
+    def getPercentage(self):
+        return self.capacity / self.maxCapacity
+
+    #Gets the state of the battery (Charging, Discharging, or Error)
+    def getState(self):
+          if self.amps < 0: return "DISCHARGING"
+          elif self.amps > 0: return "CHARGING"
           return "IDLE"
-        except Exception as e:
-          print(e)
-          return "ERROR"
 
     #For the self-heating batteries, gets if the battery is on and how much (0-100)
-    def heater(self, address):
-        try:
-          self.address = address
-          a = self.read_register(5103)
-          return ( a / 255) * 100
-        except Exception as e:
-          print(e)
-          a = 0
-          return a
+    def getHeater(self):
+        return self.heater
         
     #Gets the overall temperature of the battery by getting the average temperature of the cells
-    def batteryTemp(self, address):
+    def getBatteryTemp(self):
+      return sum(self.cellTemp) / len(self.cellTemp)
+    
+    #Reads a specific register
+    def readRegister(self, register):
       try:
-        self.address = address
-        c1 = self.read_register(5018)
-        c2 = self.read_register(5019)
-        c3 = self.read_register(5020)
-        c4 = self.read_register(5021)
-        batTemp = ((c1 + c2 + c3 + c4) / 4)
-        
-        return batTemp
+        return  self.read_register(register)
       except Exception as e:
         print(e)
-        return 0
 
-    #Reads a specific register
-    def readRegister(self, register, address):
+    def readRegisters(self, startRegister, numRegisters):
       try:
-        self.address = address
-        return  self.read_register(register)
+        return self.read_registers(startRegister, numRegisters)
       except Exception as e:
         print(e)
         
     #Writes a specific register
-    def writeRegister(self, register, value, address):
+    def writeRegister(self, register, value):
       try:
-        self.address = address
         return self.write_register(register, value)
       except Exception as e:
         print(e)
@@ -120,55 +143,12 @@ class RenogySmartBattery(minimalmodbus.Instrument):
       except Exception as e:
         print(e)
 
-    #Gets the totalAH of all the batteries ---- CHANGE THE RANGE FOR YOUR BATTERY ADDRESSES. Mine are 49,50,51,52,53
-    def totalAH(self):
-      a = 0
-      for i in range(49,54):
-        try:
-          a = a + self.capacity(i)
-        except:
-          a = a + 0
-      return a
 
-    #Gets the total current flow (in A) of all the batteries ---- CHANGE THE RANGE FOR YOUR BATTERY ADDRESSES. Mine are 49,50,51,52,53
-    def totalCurrent(self):
-      c = 0.0
-      for i in range(49,54):
-        try:
-          c = c + self.amps(i)
-        except:
-          c = c + 0.0
-      return c
-
-    #Utilizes total AH and total current to get an estimate on how long till discharged to 20% or how long till charged to 100%
-    #CHANGE MAXTOTAL TO MATCH YOUR TOTAL - MINE IS 500
-    def batRate(self):
-      total = 0
-      rate = 0
-      total = self.totalAH()
-      cur = self.totalCurrent()
-      maxTotal = 500
-
-      if( cur > 0):
-        rate = ((maxTotal - total) / cur) * -1
-      else:
-        rate = abs(total/cur)
-      return rate
-      
-    #Gets the average voltage of all batteries ---- CHANGE THE RANGE FOR YOUR BATTERY ADDRESSES. Mine are 49,50,51,52,53
-    def avgVolt(self):
-      v = 0
-      n = 0
-      for i in range(49,54):
-        vi = self.volts(i)
-        if (vi > 0):
-          n = n + 1
-          v = v + vi
-      return v / n
 
 #Main Method for demonstration
 def main():
-  renogy = RenogySmartBattery()
+  #main two arguments are the identifier of the USB connection and the address to connect to. 
+  renogy = RenogySmartBattery("/dev/USB0", 50)
   print(renogy.volts(51))
   print(renogy.amps(51))
  
