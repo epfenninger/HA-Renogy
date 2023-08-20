@@ -149,8 +149,8 @@ class RenogySmartBattery(minimalmodbus.Instrument):
 def main():
   #main two arguments are the identifier of the USB connection and the address to connect to. 
   renogy = RenogySmartBattery("/dev/USB0", 50)
-  print(renogy.volts(51))
-  print(renogy.amps(51))
+  print(renogy.volts())
+  print(renogy.amps())
  
 
 if __name__ == "__main__":
